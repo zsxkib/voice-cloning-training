@@ -1,8 +1,10 @@
 # Prediction interface for Cog ⚙️
 # https://github.com/replicate/cog/blob/main/docs/python.md
 
+import time
 import zipfile
 from cog import BasePredictor, Input, Path as CogPath
+from concurrent.futures import ThreadPoolExecutor
 from random import shuffle
 import json
 import os
@@ -15,6 +17,114 @@ import subprocess
 import shutil
 import glob
 from zipfile import ZipFile
+
+# List of URLs and destinations
+downloads = [
+    (
+        "https://weights.replicate.delivery/default/rvc/assets/pretrained/D32k.pth",
+        "assets/pretrained/D32k.pth",
+    ),
+    (
+        "https://weights.replicate.delivery/default/rvc/assets/pretrained/D40k.pth",
+        "assets/pretrained/D40k.pth",
+    ),
+    (
+        "https://weights.replicate.delivery/default/rvc/assets/pretrained/D48k.pth",
+        "assets/pretrained/D48k.pth",
+    ),
+    (
+        "https://weights.replicate.delivery/default/rvc/assets/pretrained/G32k.pth",
+        "assets/pretrained/G32k.pth",
+    ),
+    (
+        "https://weights.replicate.delivery/default/rvc/assets/pretrained/G40k.pth",
+        "assets/pretrained/G40k.pth",
+    ),
+    (
+        "https://weights.replicate.delivery/default/rvc/assets/pretrained/G48k.pth",
+        "assets/pretrained/G48k.pth",
+    ),
+    (
+        "https://weights.replicate.delivery/default/rvc/assets/pretrained/f0D32k.pth",
+        "assets/pretrained/f0D32k.pth",
+    ),
+    (
+        "https://weights.replicate.delivery/default/rvc/assets/pretrained/f0D40k.pth",
+        "assets/pretrained/f0D40k.pth",
+    ),
+    (
+        "https://weights.replicate.delivery/default/rvc/assets/pretrained/f0D48k.pth",
+        "assets/pretrained/f0D48k.pth",
+    ),
+    (
+        "https://weights.replicate.delivery/default/rvc/assets/pretrained/f0G32k.pth",
+        "assets/pretrained/f0G32k.pth",
+    ),
+    (
+        "https://weights.replicate.delivery/default/rvc/assets/pretrained/f0G40k.pth",
+        "assets/pretrained/f0G40k.pth",
+    ),
+    (
+        "https://weights.replicate.delivery/default/rvc/assets/pretrained/f0G48k.pth",
+        "assets/pretrained/f0G48k.pth",
+    ),
+    (
+        "https://weights.replicate.delivery/default/rvc/assets/pretrained_v2/D32k.pth",
+        "assets/pretrained_v2/D32k.pth",
+    ),
+    (
+        "https://weights.replicate.delivery/default/rvc/assets/pretrained_v2/D40k.pth",
+        "assets/pretrained_v2/D40k.pth",
+    ),
+    (
+        "https://weights.replicate.delivery/default/rvc/assets/pretrained_v2/D48k.pth",
+        "assets/pretrained_v2/D48k.pth",
+    ),
+    (
+        "https://weights.replicate.delivery/default/rvc/assets/pretrained_v2/G32k.pth",
+        "assets/pretrained_v2/G32k.pth",
+    ),
+    (
+        "https://weights.replicate.delivery/default/rvc/assets/pretrained_v2/G40k.pth",
+        "assets/pretrained_v2/G40k.pth",
+    ),
+    (
+        "https://weights.replicate.delivery/default/rvc/assets/pretrained_v2/G48k.pth",
+        "assets/pretrained_v2/G48k.pth",
+    ),
+    (
+        "https://weights.replicate.delivery/default/rvc/assets/pretrained_v2/f0D32k.pth",
+        "assets/pretrained_v2/f0D32k.pth",
+    ),
+    (
+        "https://weights.replicate.delivery/default/rvc/assets/pretrained_v2/f0D40k.pth",
+        "assets/pretrained_v2/f0D40k.pth",
+    ),
+    (
+        "https://weights.replicate.delivery/default/rvc/assets/pretrained_v2/f0D48k.pth",
+        "assets/pretrained_v2/f0D48k.pth",
+    ),
+    (
+        "https://weights.replicate.delivery/default/rvc/assets/pretrained_v2/f0G32k.pth",
+        "assets/pretrained_v2/f0G32k.pth",
+    ),
+    (
+        "https://weights.replicate.delivery/default/rvc/assets/pretrained_v2/f0G40k.pth",
+        "assets/pretrained_v2/f0G40k.pth",
+    ),
+    (
+        "https://weights.replicate.delivery/default/rvc/assets/pretrained_v2/f0G48k.pth",
+        "assets/pretrained_v2/f0G48k.pth",
+    ),
+    (
+        "https://weights.replicate.delivery/default/rvc/assets/hubert/hubert_base.pt",
+        "assets/hubert/hubert_base.pt",
+    ),
+    (
+        "https://weights.replicate.delivery/default/rvc/assets/rmvpe/rmvpe.pt",
+        "assets/rmvpe/rmvpe.pt",
+    ),
+]
 
 
 def infer_folder_name(base_path):
@@ -270,13 +380,36 @@ def click_train(
 
     # Wait for the process to finish
     p.wait()
-    # return "训练结束, 您可查看控制台训练日志或实验文件夹下的train.log"
     return "Training completed. You can check the training log in the console or the 'train.log' file in the experiment directory."
+
+
+def download_weights(url, dest):
+    # Check if the destination directory exists, if not, create it
+    dest_dir = os.path.dirname(dest)
+    os.makedirs(dest_dir, exist_ok=True)
+
+    # Check if the destination file already exists
+    if not os.path.exists(dest):
+        start = time.time()
+        print("Downloading URL: ", url)
+        print("Downloading to: ", dest)
+        subprocess.check_call(["pget", url, dest], close_fds=False)
+        print("Downloading took: ", time.time() - start)
+    else:
+        print(f"File already exists: {dest}")
 
 
 class Predictor(BasePredictor):
     def setup(self) -> None:
-        pass
+        # Running the downloads in parallel
+        with ThreadPoolExecutor() as executor:
+            futures = [
+                executor.submit(download_weights, url, dest) for url, dest in downloads
+            ]
+
+        # Ensure all downloads are complete before proceeding
+        for future in futures:
+            future.result()
 
     def delete_old_files(self):
         # Delete 'dataset' folder if it exists
@@ -286,6 +419,15 @@ class Predictor(BasePredictor):
         # Delete 'Model' folder if it exists
         if os.path.exists("Model"):
             shutil.rmtree("Model")
+
+        # Delete contents of 'assets/weights' folder but keep the folder
+        if os.path.exists("assets/weights"):
+            for filename in os.listdir("assets/weights"):
+                file_path = os.path.join("assets/weights", filename)
+                if os.path.isfile(file_path) or os.path.islink(file_path):
+                    os.unlink(file_path)
+                elif os.path.isdir(file_path):
+                    shutil.rmtree(file_path)
 
         # Delete contents of 'logs' folder but keep the folder and 'mute' directory
         if os.path.exists("logs"):
@@ -300,21 +442,18 @@ class Predictor(BasePredictor):
 
     def predict(
         self,
-        # model_name: str = Input(description="Model name", default="test"),
         dataset_zip: CogPath = Input(
             description="Upload dataset zip, zip should contain `dataset/<rvc_name>/split_<i>.wav`"
         ),
         sample_rate: str = Input(
-            description="Sample rate", default="48000", choices=["40000", "48000"]
+            description="Sample rate", default="48k", choices=["40k", "48k"]
         ),
-        # ksample_rate: str = Input(description="KSample rate", default="48k", choices=["40k", "48k"]),
         version: str = Input(description="Version", default="v2", choices=["v1", "v2"]),
         f0method: str = Input(
             description="F0 method, `rmvpe_gpu` recommended.",
             default="rmvpe_gpu",
             choices=["pm", "dio", "harvest", "rmvpe", "rmvpe_gpu"],
         ),
-        # save_frequency: int = Input(description="Save frequency", default=50, choices=list(range(51))),
         epoch: int = Input(description="Epoch", default=10),
         batch_size: str = Input(description="Batch size", default="7"),
     ) -> CogPath:
@@ -324,23 +463,15 @@ class Predictor(BasePredictor):
         with zipfile.ZipFile(dataset_path, "r") as zip_ref:
             zip_ref.extractall(".")
 
-        # @title Create Model Folder
+        # Create Model Folder
         model_name = infer_folder_name("dataset")
+        sample_rate = "40000" if sample_rate == "40k" else "48000"
         dataset = "dataset/" + model_name
         exp_dir = model_name
         ksample_rate = "48k"
-        if sample_rate == "40000":
-            ksample_rate = "40k"
-        else:
-            ksample_rate = "48k"
-        version19 = version
-
-        # f0method = "rmvpe_gpu" # @param ["pm", "dio", "harvest", "rmvpe", "rmvpe_gpu"]
-
-        save_frequency = 50  # @param {type:"slider", min:0, max:50, step:1}
-        # epoch = 2 # @param {type:"integer"}
-        # batch_size = "7" # @param {type:"string"}
-        cache_gpu = True  # @param {type:"boolean"}
+        ksample_rate = "40k" if sample_rate == "40000" else "48k"
+        save_frequency = 50
+        cache_gpu = True
 
         os.makedirs("%s/logs/%s" % (".", exp_dir), exist_ok=True)
         f = open("%s/logs/%s/preprocess.log" % (".", exp_dir), "w")
@@ -348,12 +479,12 @@ class Predictor(BasePredictor):
         f = open("%s/logs/%s/extract_f0_feature.log" % (".", exp_dir), "w")
         f.close()
 
-        # @title Process Data
+        # Process Data
         command = f"python infer/modules/train/preprocess.py '{dataset}' {sample_rate} 2 './logs/{exp_dir}' False 3.0"
         print(command)
         execute_command(command)
 
-        # @title Feature Extraction
+        # Feature Extraction
 
         if f0method != "rmvpe_gpu":
             command = f"python infer/modules/train/extract/extract_f0_print.py './logs/{exp_dir}' 2 '{f0method}'"
@@ -366,33 +497,29 @@ class Predictor(BasePredictor):
         print(command)
         execute_command(command)
 
-        # Commented out IPython magic to ensure Python compatibility.
-        # @title Train Feature Index
-
+        # Train Feature Index
         result_generator = train_index(exp_dir, version)
-
         for result in result_generator:
             print(result)
 
-        # Commented out IPython magic to ensure Python compatibility.
-        # @title Train Model
-
-        # Remove the logging setup
-
-        if version == "v1":
-            if ksample_rate == "40k":
-                G_path = "assets/pretrained/f0G40k.pth"
-                D_path = "assets/pretrained/f0D40k.pth"
-            elif ksample_rate == "48k":
-                G_path = "assets/pretrained/f0G48k.pth"
-                D_path = "assets/pretrained/f0D48k.pth"
-        elif version == "v2":
-            if ksample_rate == "40k":
-                G_path = "assets/pretrained_v2/f0G40k.pth"
-                D_path = "assets/pretrained_v2/f0D40k.pth"
-            elif ksample_rate == "48k":
-                G_path = "assets/pretrained_v2/f0G48k.pth"
-                D_path = "assets/pretrained_v2/f0D48k.pth"
+        # Train Model
+        pretrained_paths = {
+            "v1": {
+                "40k": ("assets/pretrained/f0G40k.pth", "assets/pretrained/f0D40k.pth"),
+                "48k": ("assets/pretrained/f0G48k.pth", "assets/pretrained/f0D48k.pth"),
+            },
+            "v2": {
+                "40k": (
+                    "assets/pretrained_v2/f0G40k.pth",
+                    "assets/pretrained_v2/f0D40k.pth",
+                ),
+                "48k": (
+                    "assets/pretrained_v2/f0G48k.pth",
+                    "assets/pretrained_v2/f0D48k.pth",
+                ),
+            },
+        }
+        G_path, D_path = pretrained_paths[version][ksample_rate]
 
         result_generator = click_train(
             exp_dir,
@@ -413,42 +540,56 @@ class Predictor(BasePredictor):
         print(result_generator)
 
         # Create directory
+        print("Creating directory...")
         os.makedirs(f"./Model/{exp_dir}", exist_ok=True)
 
         # Copy files
+        print("Copying files...")
         for file in glob.glob(f"logs/{exp_dir}/added_*.index"):
+            print(f"Copying file: {file}")
             shutil.copy(file, f"./Model/{exp_dir}")
 
         for file in glob.glob(f"logs/{exp_dir}/total_*.npy"):
+            print(f"Copying file: {file}")
             shutil.copy(file, f"./Model/{exp_dir}")
 
+        print(f"Copying file: assets/weights/{exp_dir}.pth")
         shutil.copy(f"assets/weights/{exp_dir}.pth", f"./Model/{exp_dir}")
 
         # Define the base directory
+        print("Defining the base directory...")
         base_dir = os.path.abspath(f"./Model/{exp_dir}")
 
         # Create a Zip file
+        print("Creating a Zip file...")
         zip_file_path = os.path.join(base_dir, f"{exp_dir}.zip")
         with ZipFile(zip_file_path, "w") as zipf:
             # Add 'added_*.index' files
+            print("Adding 'added_*.index' files to the Zip file...")
             for file in glob.glob(os.path.join(base_dir, "added_*.index")):
                 if os.path.exists(file):
-                    zipf.write(file)
+                    print(f"Adding file: {file}")
+                    zipf.write(file, arcname=os.path.basename(file))
                 else:
                     print(f"File not found: {file}")
 
             # Add 'total_*.npy' files
+            print("Adding 'total_*.npy' files to the Zip file...")
             for file in glob.glob(os.path.join(base_dir, "total_*.npy")):
                 if os.path.exists(file):
-                    zipf.write(file)
+                    print(f"Adding file: {file}")
+                    zipf.write(file, arcname=os.path.basename(file))
                 else:
                     print(f"File not found: {file}")
 
             # Add specific file
+            print("Adding specific file to the Zip file...")
             exp_file = os.path.join(base_dir, f"{exp_dir}.pth")
             if os.path.exists(exp_file):
-                zipf.write(exp_file)
+                print(f"Adding file: {exp_file}")
+                zipf.write(exp_file, arcname=os.path.basename(exp_file))
             else:
                 print(f"File not found: {exp_file}")
 
+        print(f"Zip file path: {zip_file_path}")
         return CogPath(zip_file_path)

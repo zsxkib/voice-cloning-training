@@ -15,3 +15,14 @@ __pycache__
 
 # Exclude Python virtual environment
 /venv
+
+# Weights
+dataset
+*.zip
+*.ipynb
+## Ignore everything in the assets directory
+assets/*
+## Except for assets/weights directory
+!assets/weights
+## Ignore everything inside assets/weights
+assets/weights/*
