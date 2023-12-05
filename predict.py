@@ -412,6 +412,8 @@ class Predictor(BasePredictor):
             future.result()
 
     def delete_old_files(self):
+        os.makedirs("assets/weights", exist_ok=True)
+
         # Delete 'dataset' folder if it exists
         if os.path.exists("dataset"):
             shutil.rmtree("dataset")
@@ -421,13 +423,13 @@ class Predictor(BasePredictor):
             shutil.rmtree("Model")
 
         # Delete contents of 'assets/weights' folder but keep the folder
-        if os.path.exists("assets/weights"):
-            for filename in os.listdir("assets/weights"):
-                file_path = os.path.join("assets/weights", filename)
-                if os.path.isfile(file_path) or os.path.islink(file_path):
-                    os.unlink(file_path)
-                elif os.path.isdir(file_path):
-                    shutil.rmtree(file_path)
+        # if os.path.exists("assets/weights"):
+        #     for filename in os.listdir("assets/weights"):
+        #         file_path = os.path.join("assets/weights", filename)
+        #         if os.path.isfile(file_path) or os.path.islink(file_path):
+        #             os.unlink(file_path)
+        #         elif os.path.isdir(file_path):
+        #             shutil.rmtree(file_path)
 
         # Delete contents of 'logs' folder but keep the folder and 'mute' directory
         if os.path.exists("logs"):
