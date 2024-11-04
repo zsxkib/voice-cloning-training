@@ -5,6 +5,7 @@ import time
 import zipfile
 from cog import BasePredictor, Input, Path as CogPath
 from concurrent.futures import ThreadPoolExecutor
+from sklearn.cluster import MiniBatchKMeans
 from random import shuffle
 import json
 import os
